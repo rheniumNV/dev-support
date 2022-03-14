@@ -1,5 +1,5 @@
-import NotionClient from "./lib/notion";
-import DiscordClient from "./lib/discord";
+import NotionClient from "./lib/notion/client";
+import DiscordClient from "./lib/discord/client";
 
 const { NOTION_TOKEN, DISCORD_TOKEN, DISCORD_GUILD_ID } = process.env;
 
