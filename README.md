@@ -1,4 +1,4 @@
-# dev-support
+# project-support
 
 Notion と Discord と Neos の連携などなど。
 
