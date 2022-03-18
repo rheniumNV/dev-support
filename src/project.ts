@@ -62,6 +62,7 @@ export default class Project {
   }
 
   async setup() {
+    await this.discordClient.login();
     await this.membersManager.setup();
 
     this.apps = (await this.appConfigListDatabase.list())
