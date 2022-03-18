@@ -1,12 +1,13 @@
-import NotionClient from "../../lib/notion/client";
-import NotionDatabase from "../../lib/notion/notionDatabase";
+import NotionDatabase, {
+  NotionClientOwner,
+} from "../../lib/notion/notionDatabase";
 import {
   NotionDatabasePropDate,
   NotionDatabasePropTitleString,
   NotionDatabasePropRichTextString,
-  NotionDatabasePropRaw,
   NotionDatabasePropFormula,
   NotionDatabasePropNumber,
+  NotionDatabasePropMultiSelect,
 } from "../../lib/notion/notionDatabase/notionDatabaseProp";
 import moment from "moment";
 import _ from "lodash";
@@ -28,7 +29,7 @@ export class NotificationTargetDatabase extends NotionDatabase {
   };
 
   constructor(
-    init: { notionClient: NotionClient; rawId: string },
+    init: { notionClientOwner: NotionClientOwner; rawId: string },
     rawNames: {
       message?: string;
       mentionUsers?: string;
@@ -36,7 +37,7 @@ export class NotificationTargetDatabase extends NotionDatabase {
       date?: string;
     }
   ) {
-    super({ notionClient: init.notionClient, rawId: init.rawId });
+    super({ notionClientOwner: init.notionClientOwner, rawId: init.rawId });
     this.props.message.rawName = rawNames.message ?? "message";
     this.props.mentionUsers.rawName = rawNames.mentionUsers ?? "mentionUsers";
     this.props.metaData.rawName = rawNames.metaData ?? "metaData";
@@ -60,99 +61,85 @@ export class RemindNotificationTimingsDatabase extends NotionDatabase {
     title: new NotionDatabasePropTitleString("title"),
     code: new NotionDatabasePropRichTextString("code"),
     minutes: new NotionDatabasePropNumber("minutes"),
-    mentions: new NotionDatabasePropRaw("mentions"),
+    mentions: new NotionDatabasePropMultiSelect("mentions"),
   };
 }
 
 type TNotifyFunctionInput = {
   message: string;
   mentionTargets: string;
-  activeTimings: Array<string>;
+  activeTimings: Array<RemindNotificationTimingsDatabase["props"]>;
 };
 export default class RemindNotificationTask {
-  notificationTarget: NotificationTargetDatabase | undefined;
-  remindNotificationTimingsDatabase:
-    | RemindNotificationTimingsDatabase
-    | undefined;
+  notificationTargetDatabase: NotificationTargetDatabase;
+  remindNotificationTimingsDatabase: RemindNotificationTimingsDatabase;
 
   notifyFunction: (data: TNotifyFunctionInput) => void = () => {};
 
-  public async setup(init: {
-    notionClient: NotionClient;
-    targetDatabaseId: string;
-    rawNames: {
-      message?: string;
-      date?: string;
-      metaData?: string;
-      mentionUsers?: string;
-    };
-    timingTriggersDatabaseId: string;
+  constructor(init: {
+    notificationTargetDatabase: NotificationTargetDatabase;
+    remindNotificationTimingsDatabase: RemindNotificationTimingsDatabase;
     notifyFunction: (data: TNotifyFunctionInput) => void;
   }) {
-    this.notificationTarget = new NotificationTargetDatabase(
-      {
-        notionClient: init.notionClient,
-        rawId: init.targetDatabaseId,
-      },
-      init.rawNames
-    );
+    this.notificationTargetDatabase = init.notificationTargetDatabase;
     this.remindNotificationTimingsDatabase =
-      new RemindNotificationTimingsDatabase({
-        notionClient: init.notionClient,
-        rawId: init.timingTriggersDatabaseId,
-      });
-    await this.remindNotificationTimingsDatabase.list();
+      init.remindNotificationTimingsDatabase;
     this.notifyFunction = init.notifyFunction;
   }
 
+  public async setup() {}
+
   public async update() {
-    if (this.notificationTarget) {
-      const dataList = await this.notificationTarget.list();
+    await this.remindNotificationTimingsDatabase.list();
 
-      const nowDate = moment();
-      dataList.forEach((table) => {
-        const metaData =
-          parseJsonSafe<{ [key: string]: boolean }>(
-            table.props.metaData.value
-          ) ?? {};
+    await this.notificationTargetDatabase.list();
 
-        const startDate = moment(table.props.date.value.start);
-        const diffMin = startDate.diff(nowDate, "minutes");
+    const nowDate = moment();
 
-        if (diffMin <= 0) {
-          return;
-        }
-        console.log("METADATA", metaData);
-        const activeTimings = _.filter(
-          this.remindNotificationTimingsDatabase?.cache,
-          (timing) => {
-            return (
-              Number(timing.props.minutes.value) > diffMin &&
-              !_.get(metaData, timing.props.code.value, false)
-            );
-          }
-        ).map((timing) => timing.props.code.value);
-        const newMetadata = {
-          ...metaData,
-          ..._.reduce(
-            activeTimings,
-            (prev, curr) => ({ ...prev, [curr]: true }),
-            {}
-          ),
-        };
-        if (activeTimings.length > 0) {
-          this.notificationTarget?.updateMetaDate(
-            table.props.metaData,
-            JSON.stringify(newMetadata)
+    this.notificationTargetDatabase.cache.forEach((record) => {
+      const metaData =
+        parseJsonSafe<{ [key: string]: boolean }>(
+          record.props.metaData.value
+        ) ?? {};
+
+      const startDate = moment(record.props.date.value.start);
+      const diffMin = startDate.diff(nowDate, "minutes");
+
+      if (diffMin <= 0) {
+        return;
+      }
+      console.log("METADATA", metaData);
+      const activeTimings = _.filter(
+        this.remindNotificationTimingsDatabase?.cache,
+        (timing) => {
+          return (
+            Number(timing.props.minutes.value) > diffMin &&
+            !_.get(metaData, timing.props.code.value, false)
           );
-
-          this.notifyFunction({
-            message: table.props.message.value ?? "",
-            mentionTargets: table.props.mentionUsers.value ?? "",
-            activeTimings: activeTimings.map((table) => JSON.stringify(table)),
-          });
         }
-      });
-    }
+      );
+
+      const newMetadata = {
+        ...metaData,
+        ..._.reduce(
+          activeTimings,
+          (prev, curr) => ({ ...prev, [curr.props.code.value]: true }),
+          {}
+        ),
+      };
+
+      if (activeTimings.length > 0) {
+        this.notificationTargetDatabase?.updateMetaDate(
+          record.props.metaData,
+          JSON.stringify(newMetadata)
+        );
+
+        this.notifyFunction({
+          message: record.props.message.value ?? "",
+          mentionTargets: record.props.mentionUsers.value ?? "",
+          activeTimings: activeTimings.map((record) => record.props),
+        });
+      }
+    });
   }
 }

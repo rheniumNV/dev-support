@@ -5,6 +5,10 @@ import {
   generateNotionDatabasePropData,
 } from "./notionDatabaseProp";
 
+export type NotionClientOwner = {
+  notionClient: NotionClient;
+};
+
 type TTableRecord<TProps extends { [key: string]: NotionDatabaseProp<any> }> = {
   id: string;
   props: TProps;
@@ -23,17 +27,17 @@ export class Record<TProps extends { [key: string]: NotionDatabaseProp<any> }> {
 export default abstract class NotionDatabase {
   props: { [key: string]: NotionDatabaseProp<any> } = {};
   cache: Array<TTableRecord<this["props"]>> = [];
-  notionClient: NotionClient;
+  notionClientOwner: NotionClientOwner;
   rawId: string = "";
   records: Array<TTableRecord<this["props"]>> = [];
 
-  constructor(init: { notionClient: NotionClient; rawId: string }) {
-    this.notionClient = init.notionClient;
+  constructor(init: { notionClientOwner: NotionClientOwner; rawId: string }) {
+    this.notionClientOwner = init.notionClientOwner;
     this.rawId = init.rawId;
   }
 
   async update() {
-    const response = await this.notionClient.databasesQuery({
+    const response = await this.notionClientOwner.notionClient.databasesQuery({
       database_id: this.rawId,
     });
     const newRecords = _.map(response.results, (data) => {
@@ -69,7 +73,7 @@ export default abstract class NotionDatabase {
   }
 
   async list(): Promise<Array<TTableRecord<this["props"]>>> {
-    const response = await this.notionClient.databasesQuery({
+    const response = await this.notionClientOwner.notionClient.databasesQuery({
       database_id: this.rawId,
     });
 
@@ -108,9 +112,13 @@ export default abstract class NotionDatabase {
     value: T["rawValue"]
   ) {
     if (target.pageId) {
-      await this.notionClient.update(target.pageId, target.rawName, {
-        [target.typeName]: value,
-      });
+      await this.notionClientOwner.notionClient.update(
+        target.pageId,
+        target.rawName,
+        {
+          [target.typeName]: value,
+        }
+      );
     } else {
       throw new Error("pageId is nothing");
     }

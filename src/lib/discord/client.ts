@@ -105,7 +105,7 @@ export default class DiscordClient {
   }
 
   public async getUser(userId: string) {
-    await this.client.users.fetch(userId);
+    return await this.client.users.fetch(userId);
   }
 
   public async sendMessage(

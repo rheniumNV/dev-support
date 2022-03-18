@@ -7,103 +7,93 @@ import {
   NotionDatabasePropSelect,
 } from "./lib/notion/notionDatabase/notionDatabaseProp";
 import App from "./app";
-import RemindNotificationApp from "./app/remindNotification";
-import MembersDatabase from "./membersDatabase";
+import RemindNotificationApp, {
+  RemindNotificationTasksDatabase,
+} from "./app/remindNotification";
+import MembersManager, { MembersDatabase } from "./membersManager";
 
 class AppConfigListDatabase extends NotionDatabase {
   props = {
     appName: new NotionDatabasePropTitleString("appName"),
     appCode: new NotionDatabasePropSelect("appCode"),
-    tasksDatabaseLinks: new NotionDatabasePropRichTextMentionList(
-      "tasksDatabaseLinks"
+    appConfigDatabaseLinks: new NotionDatabasePropRichTextMentionList(
+      "appConfigDatabaseLinks"
     ),
   };
 }
 
-type TAppTask = {
-  id: string;
-  app: App;
-  arg: {
-    clients: { notionClient: NotionClient; discordClient: DiscordClient };
-    tasksDatabaseId: string;
-    discordGuildId: string;
-  };
-};
-
 export default class Project {
   name: string;
-  appConfigListDatabase: AppConfigListDatabase;
-  membersDatabase: MembersDatabase;
-  apps: Array<TAppTask>;
+  discordGuildId: string;
+
   notionClient: NotionClient;
   discordClient: DiscordClient;
-  discordGuildId: string;
+
+  membersManager: MembersManager;
+  appConfigListDatabase: AppConfigListDatabase;
+
+  apps: Array<App<any>> = [];
 
   constructor(init: {
     name: string;
+    discordGuildId: string;
     notionClient: NotionClient;
     discordClient: DiscordClient;
-    appConfigListDatabaseId: string;
     membersDatabaseId: string;
-    discordGuildId: string;
+    appConfigListDatabaseId: string;
   }) {
-    this.apps = [];
     this.name = init.name;
+    this.discordGuildId = init.discordGuildId;
+
     this.notionClient = init.notionClient;
     this.discordClient = init.discordClient;
+
     this.appConfigListDatabase = new AppConfigListDatabase({
-      notionClient: init.notionClient,
+      notionClientOwner: this,
       rawId: init.appConfigListDatabaseId,
     });
-    this.membersDatabase = new MembersDatabase({
-      notionClient: init.notionClient,
-      rawId: init.membersDatabaseId,
+    this.membersManager = new MembersManager({
+      project: this,
+      membersDatabase: new MembersDatabase({
+        notionClientOwner: this,
+        rawId: init.membersDatabaseId,
+      }),
     });
-    this.discordGuildId = init.discordGuildId;
   }
 
   async setup() {
-    await this.membersDatabase.list();
+    await this.membersManager.setup();
 
     this.apps = (await this.appConfigListDatabase.list())
-      .map((table) => {
-        const appCode = table.props.appCode.value?.name;
-        const appName = table.props.appName.value;
-        const tasksDatabaseIds = table.props.tasksDatabaseLinks.value.map(
-          ({ target }) => target
-        );
+      .map((record) => {
+        const appCode = record.props.appCode.value?.name;
+        const name = record.props.appName.value;
+        const appConfigDatabaseIds =
+          record.props.appConfigDatabaseLinks.value.map(({ target }) => target);
 
         switch (appCode) {
           case "remindNotification":
-            return tasksDatabaseIds.map((tasksDatabaseId, index) => ({
-              id: `${table.id}-${index}`,
-              app: new RemindNotificationApp({
-                appName,
-                tasksDatabaseId,
-                discordClient: this.discordClient,
-                discordGuildId: this.discordGuildId,
-                membersDatabase: this.membersDatabase,
-              }),
-              arg: {
-                clients: {
-                  notionClient: this.notionClient,
-                  discordClient: this.discordClient,
-                },
-                tasksDatabaseId,
-                discordGuildId: this.discordGuildId,
-              },
-            }));
+            return appConfigDatabaseIds.map(
+              (tasksDatabaseId, index) =>
+                new RemindNotificationApp({
+                  id: `${record.id}-${index}`,
+                  project: this,
+                  name,
+                  configDatabase: new RemindNotificationTasksDatabase({
+                    notionClientOwner: this,
+                    rawId: tasksDatabaseId,
+                  }),
+                })
+            );
           default:
             return [];
         }
       })
       .flatMap((v) => v);
-    await Promise.all(
-      this.apps.map(async ({ app, arg }) => await app.setup(arg))
-    );
+    await Promise.all(this.apps.map(async (app) => await app.setup()));
   }
 
   async update() {
-    await Promise.all(this.apps.map(async ({ app }) => await app.update()));
+    await Promise.all(this.apps.map(async (app) => await app.update()));
   }
 }

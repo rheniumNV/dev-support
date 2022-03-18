@@ -158,15 +158,17 @@ export class NotionDatabasePropNumber extends NotionDatabaseProp<number> {
   };
 }
 
-type TUser = {
+export type TNotionUser = {
   id: string;
   name: string;
   avatar_url: string;
   type: string;
 };
-export class NotionDatabasePropUser extends NotionDatabaseProp<Array<TUser>> {
+export class NotionDatabasePropUser extends NotionDatabaseProp<
+  Array<TNotionUser>
+> {
   typeName: "people" = "people";
-  value: Array<TUser> = [];
+  value: Array<TNotionUser> = [];
   parse = (prop: Array<any>) => {
     if (_.isArray(prop)) {
       return prop
@@ -182,4 +184,12 @@ export class NotionDatabasePropUser extends NotionDatabaseProp<Array<TUser>> {
       return [];
     }
   };
+}
+
+export class NotionDatabasePropMultiSelect extends NotionDatabaseProp<
+  Array<TSelect>
+> {
+  typeName: "multi_select" = "multi_select";
+  value: Array<TSelect> = [];
+  parse = (prop: any): Array<TSelect> => _.get(prop, ["multi_select"]);
 }

@@ -16,7 +16,7 @@ const {
   CLIENT_MAP,
 } = process.env;
 
-class ProjectConfigListDatabase extends NotionDatabase {
+class ProjectsDatabase extends NotionDatabase {
   props = {
     projectName: new NotionDatabasePropTitleString("projectName"),
     clientCode: new NotionDatabasePropRichTextString("clientCode"),
@@ -44,14 +44,16 @@ async function main() {
     throw new Error(`CLIENT_MAP is not string.`);
   }
 
-  const notionClient = new NotionClient({ token: NOTION_TOKEN });
-  const projectConfigListDatabase = new ProjectConfigListDatabase({
-    notionClient,
+  const projectsDatabase = new ProjectsDatabase({
+    notionClientOwner: {
+      notionClient: new NotionClient({ token: NOTION_TOKEN }),
+    },
     rawId: PROJECT_CONFIG_LIST_DATABASE_ID,
   });
-  const projectConfigList = await projectConfigListDatabase.list();
+  const projectConfigList = await projectsDatabase.list();
 
   const clientMap = JSON.parse(CLIENT_MAP);
+
   const projects = projectConfigList
     .map((table) => {
       const appConfigListDatabaseId = _.get(
@@ -87,49 +89,12 @@ async function main() {
           discordGuildId,
         });
       }
-      return undefined;
+      return [];
     })
-    .filter((project) => project);
+    .flatMap((v) => v);
 
-  await Promise.all(projects.map((project) => project?.setup()));
-  await Promise.all(projects.map((project) => project?.update()));
-
-  // projects.forEach((project) => {
-  //   console.log(project?.name);
-  //   project?.appConfigListDatabase.cache.forEach((table) => {
-  //     const appName = table.props.appName.value;
-  //     const appCode = table.props.appCode.value?.name;
-  //     const databaseId = table.props.configDatabaseId.value.map(
-  //       ({ href }) => href
-  //     );
-  //     const state = table.props.state.value?.name;
-  //     console.log(`  - ${appName}(${appCode}) ${databaseId} ${state}`);
-  //   });
-  // });
-
-  // const discordClient = new DiscordClient();
-  // discordClient.onceReady(() => {
-  //   discordClient.setSlashCommandGuild(
-  //     [
-  //       {
-  //         name: "members",
-  //         description: "display notion members",
-  //       },
-  //     ],
-  //     ROOT_CONFIG_DATABASE_ID
-  //   );
-
-  //   discordClient.onCommandInteractionCreate(async (interaction) => {
-  //     if (interaction.commandName === "members") {
-  //       const members = await notionClient.getMembers();
-  //       const replyMessage = members
-  //         .map(({ name, type }) => `[${type}] ${name}`)
-  //         .join("\n");
-  //       interaction.reply(replyMessage);
-  //     }
-  //   });
-  // });
-  // discordClient.login(DISCORD_TOKEN);
+  await Promise.all(projects.map((project) => project.setup()));
+  await Promise.all(projects.map((project) => project.update()));
 }
 
 main();

@@ -1,43 +1,31 @@
-import NotionClient from "../lib/notion/client";
-import DiscordClient from "../lib/discord/client";
-import MembersDatabase from "../membersDatabase";
+import Project from "../project";
+import NotionDatabase from "../lib/notion/notionDatabase";
 
-export default abstract class App {
+export default abstract class App<TConfigDatabase extends NotionDatabase> {
+  project: Project;
+
   isEmpty: boolean = false;
-  notionClient: NotionClient = new NotionClient({});
-  discordClient: DiscordClient = new DiscordClient({});
-  appName: string;
-  tasksDatabaseId: string;
-  discordGuildId: string;
-  membersDatabase: MembersDatabase;
+
+  id: string;
+  name: string;
+
+  // todo: move to child class
+  configDatabase: TConfigDatabase;
 
   constructor(init: {
-    appName: string;
-    tasksDatabaseId: string;
-    discordClient: DiscordClient;
-    discordGuildId: string;
-    membersDatabase: MembersDatabase;
+    project: Project;
+    id: string;
+    name: string;
+    configDatabase: TConfigDatabase;
   }) {
-    this.appName = init.appName;
-    this.tasksDatabaseId = init.tasksDatabaseId;
-    this.discordGuildId = init.discordGuildId;
-    this.discordClient = init.discordClient;
-    this.membersDatabase = init.membersDatabase;
+    this.project = init.project;
+
+    this.id = init.id;
+    this.name = init.name;
+    this.configDatabase = init.configDatabase;
   }
 
-  abstract setup(init: {
-    clients: { notionClient: NotionClient; discordClient: DiscordClient };
-    tasksDatabaseId: string;
-    discordGuildId: string;
-  }): Promise<void>;
+  abstract setup(): Promise<void>;
 
   abstract update(): Promise<void>;
-}
-
-export class EmptyApp extends App {
-  isEmpty: boolean = true;
-
-  async setup(): Promise<void> {}
-
-  async update(): Promise<void> {}
 }
