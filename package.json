@@ -1,5 +1,5 @@
 {
-  "name": "dev-support",
+  "name": "project-support",
   "version": "1.0.0",
   "description": "",
   "main": "main.ts",
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/lodash": "^4.14.179",
+    "@types/moment": "^2.13.0",
     "@typescript-eslint/eslint-plugin": "^5.14.0",
     "@typescript-eslint/parser": "^5.14.0",
     "eslint": "^7.32.0",

@@ -6,9 +6,17 @@ import {
 import _ from "lodash";
 
 export default class NotionClient {
-  private client: Client = new Client({ auth: "" });
+  private client: Client;
 
-  public constructor({ token }: { token: string }) {
+  public constructor({ token }: { token?: string }) {
+    if (token) {
+      this.client = new Client({ auth: token });
+    } else {
+      this.client = new Client({ auth: "" });
+    }
+  }
+
+  public setup({ token }: { token: string }) {
     this.client = new Client({ auth: token });
   }
 
@@ -20,5 +28,14 @@ export default class NotionClient {
     query: QueryDatabaseParameters
   ): Promise<QueryDatabaseResponse> {
     return await this.client.databases.query(query);
+  }
+
+  public async update(pageId: string, propName: string, value: any) {
+    await this.client.pages.update({
+      page_id: pageId,
+      properties: {
+        [propName]: value,
+      },
+    });
   }
 }

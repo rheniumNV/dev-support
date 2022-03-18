@@ -1,6 +1,7 @@
 import _ from "lodash";
 
 export abstract class NotionDatabaseProp<T> {
+  pageId: string | undefined;
   rawName: string;
   rawValue: any;
   abstract typeName: string;
@@ -13,11 +14,13 @@ export abstract class NotionDatabaseProp<T> {
 }
 
 export function generateNotionDatabasePropData(
+  pageId: string,
   prop: NotionDatabaseProp<any>,
   rawValue: any
 ): NotionDatabaseProp<any> {
   const value = prop.parse(rawValue);
   return {
+    pageId,
     rawName: prop.rawName,
     typeName: prop.typeName,
     rawValue,
@@ -112,5 +115,71 @@ export class NotionDatabasePropDate extends NotionDatabaseProp<{
     const start = parseDate(_.get(value, ["date", "start"]));
     const end = parseDate(_.get(value, ["date", "end"]));
     return { start, end };
+  };
+}
+
+// export abstract class NotionDatabasePropRelationJoined<
+//   TJoinedDatabase extends NotionDatabase
+// > extends NotionDatabaseProp<TJoinedDatabase["props"]> {
+//   joinedNotionDatabase: TJoinedDatabase;
+//   constructor(rawName: string, joinedNotionDatabase: TJoinedDatabase) {
+//     super(rawName);
+//     this.joinedNotionDatabase = joinedNotionDatabase;
+//   }
+//   parse: (value: any) => TJoinedDatabase["props"];
+
+// }
+
+export class NotionDatabasePropRelationIds extends NotionDatabaseProp<
+  Array<{ id: string }>
+> {
+  typeName: "relation" = "relation";
+  value: { id: string }[] = [];
+  parse = (prop: any): Array<{ id: string }> => {
+    return _.get(prop, ["relation"], []);
+  };
+}
+
+export class NotionDatabasePropFormula<
+  T extends string
+> extends NotionDatabaseProp<T | undefined> {
+  typeName: "formula" = "formula";
+  value: T | undefined;
+  parse = (prop: any): T | undefined => {
+    return _.get(prop, ["formula", "string"]);
+  };
+}
+
+export class NotionDatabasePropNumber extends NotionDatabaseProp<number> {
+  typeName: "number" = "number";
+  value: number = 0;
+  parse = (prop: any): number => {
+    return Number(_.get(prop, ["number"], 0));
+  };
+}
+
+type TUser = {
+  id: string;
+  name: string;
+  avatar_url: string;
+  type: string;
+};
+export class NotionDatabasePropUser extends NotionDatabaseProp<Array<TUser>> {
+  typeName: "people" = "people";
+  value: Array<TUser> = [];
+  parse = (prop: Array<any>) => {
+    if (_.isArray(prop)) {
+      return prop
+        .map((user) => {
+          const id = user.id;
+          const name = user.name;
+          const avatar_url = user.avatar_url;
+          const type = user.type;
+          return id && name && type ? [{ id, name, avatar_url, type }] : [];
+        })
+        .flatMap((v) => v);
+    } else {
+      return [];
+    }
   };
 }

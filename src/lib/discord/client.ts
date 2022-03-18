@@ -11,7 +11,7 @@ import {
 import _ from "lodash";
 
 function isTextChannel(
-  channel: undefined | AnyChannel
+  channel: undefined | null | AnyChannel
 ): channel is TextChannel {
   return _.has(channel, "send") !== undefined;
 }
@@ -31,8 +31,25 @@ export default class DiscordClient {
     ],
   });
 
-  public login(token: string) {
-    this.client.login(token);
+  private token: string | undefined;
+  private allowedGuildIds: Array<string> = [];
+  private allowAllGuild: boolean = false;
+
+  constructor(init: {
+    token?: string;
+    allowedGuildIds?: Array<string>;
+    allowAllGuild?: boolean;
+  }) {
+    this.token = init.token;
+    this.allowedGuildIds = init.allowedGuildIds ?? [];
+    this.allowAllGuild = init.allowAllGuild ?? false;
+  }
+
+  public async login(token?: string) {
+    if (token) {
+      this.token = token;
+    }
+    await this.client.login(this.token);
   }
 
   public onceReady(func: (client: Client<true>) => Awaitable<void>) {
@@ -87,13 +104,30 @@ export default class DiscordClient {
     );
   }
 
-  public sendMessage(channelId: string, message: string) {
-    const channel = this.client.channels.cache.get(channelId);
-    if (!isTextChannel(channel)) {
-      throw new Error("channel is not TextChannel");
+  public async getUser(userId: string) {
+    await this.client.users.fetch(userId);
+  }
+
+  public async sendMessage(
+    guildId: string,
+    channelId: string,
+    message: string
+  ) {
+    if (!this.allowAllGuild && !_.includes(this.allowedGuildIds, guildId)) {
+      throw new Error(`guildId is not allowed. guildId=${guildId}`);
     }
 
-    channel.send(message);
+    const guild = await this.client.guilds.fetch(guildId);
+    const channel = await guild.channels.fetch(channelId);
+
+    if (!channel) {
+      throw new Error(`channel is not found. channelId=${channelId}`);
+    }
+
+    if (!isTextChannel(channel)) {
+      throw new Error(`channel is not TextChannel. channelId=${channelId}`);
+    }
+    await channel.send(message);
   }
 
   public interaction() {}
