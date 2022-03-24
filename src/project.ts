@@ -11,6 +11,7 @@ import RemindNotificationApp, {
   RemindNotificationTasksDatabase,
 } from "./app/remindNotification";
 import MembersManager, { MembersDatabase } from "./membersManager";
+import _ from "lodash";
 
 class AppConfigListDatabase extends NotionDatabase {
   props = {
@@ -40,6 +41,11 @@ export default class Project {
     notionClient: NotionClient;
     discordClient: DiscordClient;
     membersDatabaseId: string;
+    membersDatabaseFieldNameMap: {
+      FnName: string;
+      FnUser: string;
+      FnDiscordId: string;
+    };
     appConfigListDatabaseId: string;
   }) {
     this.name = init.name;
@@ -57,6 +63,7 @@ export default class Project {
       membersDatabase: new MembersDatabase({
         notionClientOwner: this,
         rawId: init.membersDatabaseId,
+        membersDatabaseFieldNameMap: init.membersDatabaseFieldNameMap,
       }),
     });
   }
@@ -70,7 +77,14 @@ export default class Project {
         const appCode = record.props.appCode.value?.name;
         const name = record.props.appName.value;
         const appConfigDatabaseIds =
-          record.props.appConfigDatabaseLinks.value.map(({ target }) => target);
+          record.props.appConfigDatabaseLinks.value?.map(
+            ({ target }) => target
+          );
+        if (!name || !appConfigDatabaseIds) {
+          throw new Error(
+            `undefined Error. name=${name}. appConfigDatabaseIds=${appConfigDatabaseIds}`
+          );
+        }
 
         switch (appCode) {
           case "remindNotification":
@@ -92,6 +106,14 @@ export default class Project {
       })
       .flatMap((v) => v);
     await Promise.all(this.apps.map(async (app) => await app.setup()));
+
+    this.discordClient.onMessageReactionAdd((reaction, user) => {
+      if (reaction.message.guild?.id === this.discordGuildId) {
+        this.apps.forEach((app) => {
+          app.onMessageReaction(reaction, user);
+        });
+      }
+    });
   }
 
   async update() {

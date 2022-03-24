@@ -5,8 +5,8 @@ export abstract class NotionDatabaseProp<T> {
   rawName: string;
   rawValue: any;
   abstract typeName: string;
-  abstract value: T;
-  abstract parse: (value: any) => T;
+  value: T | undefined;
+  abstract parse: (value: any) => T | undefined;
 
   constructor(rawName: string) {
     this.rawName = rawName;
@@ -37,8 +37,7 @@ export class NotionDatabasePropRaw extends NotionDatabaseProp<any> {
 
 export class NotionDatabasePropRichTextString extends NotionDatabaseProp<string> {
   typeName: "rich_text" = "rich_text";
-  value: string = "";
-  parse = (value: any): string =>
+  parse = (value: any): this["value"] =>
     _(_.get(value, "rich_text", []))
       .map((element) => _.get(element, "plain_text", ""))
       .join("\n");
@@ -46,8 +45,7 @@ export class NotionDatabasePropRichTextString extends NotionDatabaseProp<string>
 
 export class NotionDatabasePropTitleString extends NotionDatabaseProp<string> {
   typeName: "rich_text" = "rich_text";
-  value: string = "";
-  parse = (value: any): string =>
+  parse = (value: any): this["value"] =>
     _(_.get(value, "title", []))
       .map((element) => _.get(element, "plain_text", ""))
       .join("\n");
@@ -64,8 +62,7 @@ export class NotionDatabasePropRichTextMentionList extends NotionDatabaseProp<
   Array<TMention>
 > {
   typeName: "rich_text" = "rich_text";
-  value: Array<TMention> = [];
-  parse = (value: any): Array<TMention> =>
+  parse = (value: any): this["value"] =>
     _(_.get(value, "rich_text", []))
       .filter(({ type }) => type === "mention")
       .map((element) => {
@@ -83,12 +80,9 @@ type TSelect = {
   color: string;
 };
 
-export class NotionDatabasePropSelect extends NotionDatabaseProp<
-  TSelect | undefined
-> {
+export class NotionDatabasePropSelect extends NotionDatabaseProp<TSelect> {
   typeName: "rich_text" = "rich_text";
-  value: TSelect | undefined;
-  parse = (value: any): TSelect | undefined => {
+  parse = (value: any): this["value"] => {
     const { id, name, color } = _.get(value, "select", {}) ?? {};
     if (
       typeof id === "string" &&
@@ -109,9 +103,8 @@ export class NotionDatabasePropDate extends NotionDatabaseProp<{
   end?: Date;
 }> {
   typeName: "Date" = "Date";
-  value: { start?: Date; end?: Date } = {};
 
-  parse = (value: any): { start?: Date; end?: Date } => {
+  parse = (value: any): this["value"] => {
     const start = parseDate(_.get(value, ["date", "start"]));
     const end = parseDate(_.get(value, ["date", "end"]));
     return { start, end };
@@ -134,27 +127,24 @@ export class NotionDatabasePropRelationIds extends NotionDatabaseProp<
   Array<{ id: string }>
 > {
   typeName: "relation" = "relation";
-  value: { id: string }[] = [];
-  parse = (prop: any): Array<{ id: string }> => {
-    return _.get(prop, ["relation"], []);
+  parse = (prop: any): this["value"] => {
+    return _.get(prop, ["relation"]);
   };
 }
 
 export class NotionDatabasePropFormula<
   T extends string
-> extends NotionDatabaseProp<T | undefined> {
+> extends NotionDatabaseProp<T> {
   typeName: "formula" = "formula";
-  value: T | undefined;
-  parse = (prop: any): T | undefined => {
+  parse = (prop: any): this["value"] => {
     return _.get(prop, ["formula", "string"]);
   };
 }
 
 export class NotionDatabasePropNumber extends NotionDatabaseProp<number> {
   typeName: "number" = "number";
-  value: number = 0;
-  parse = (prop: any): number => {
-    return Number(_.get(prop, ["number"], 0));
+  parse = (prop: any): this["value"] => {
+    return Number(_.get(prop, ["number"]));
   };
 }
 
@@ -168,20 +158,19 @@ export class NotionDatabasePropUser extends NotionDatabaseProp<
   Array<TNotionUser>
 > {
   typeName: "people" = "people";
-  value: Array<TNotionUser> = [];
-  parse = (prop: Array<any>) => {
-    if (_.isArray(prop)) {
-      return prop
-        .map((user) => {
-          const id = user.id;
-          const name = user.name;
-          const avatar_url = user.avatar_url;
-          const type = user.type;
+  parse = (records: { people: Array<any> }): this["value"] => {
+    if (_.isArray(records?.people)) {
+      return records.people
+        .map((record) => {
+          const id = record?.id;
+          const name = record?.name;
+          const avatar_url = record?.avatar_url;
+          const type = record?.type;
           return id && name && type ? [{ id, name, avatar_url, type }] : [];
         })
         .flatMap((v) => v);
     } else {
-      return [];
+      return undefined;
     }
   };
 }
@@ -190,6 +179,5 @@ export class NotionDatabasePropMultiSelect extends NotionDatabaseProp<
   Array<TSelect>
 > {
   typeName: "multi_select" = "multi_select";
-  value: Array<TSelect> = [];
-  parse = (prop: any): Array<TSelect> => _.get(prop, ["multi_select"]);
+  parse = (prop: any): this["value"] => _.get(prop, ["multi_select"]);
 }

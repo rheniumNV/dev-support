@@ -1,5 +1,5 @@
 import { User } from "discord.js";
-import NotionDatabase from "./lib/notion/notionDatabase";
+import NotionDatabase, { NotionClientOwner } from "./lib/notion/notionDatabase";
 import {
   NotionDatabasePropRichTextString,
   NotionDatabasePropTitleString,
@@ -7,6 +7,7 @@ import {
   TNotionUser,
 } from "./lib/notion/notionDatabase/notionDatabaseProp";
 import Project from "./project";
+import _ from "lodash";
 
 export class MembersDatabase extends NotionDatabase {
   props = {
@@ -14,6 +15,20 @@ export class MembersDatabase extends NotionDatabase {
     user: new NotionDatabasePropUser("user"),
     discordId: new NotionDatabasePropRichTextString("discordId"),
   };
+  constructor(init: {
+    notionClientOwner: NotionClientOwner;
+    rawId: string;
+    membersDatabaseFieldNameMap: {
+      FnName: string;
+      FnUser: string;
+      FnDiscordId: string;
+    };
+  }) {
+    super(init);
+    this.props.name.rawName = init.membersDatabaseFieldNameMap.FnName;
+    this.props.user.rawName = init.membersDatabaseFieldNameMap.FnUser;
+    this.props.discordId.rawName = init.membersDatabaseFieldNameMap.FnDiscordId;
+  }
 }
 
 type Member = {
@@ -33,25 +48,30 @@ export default class MembersManager {
   }
 
   async setup() {
-    this.members = await Promise.all<Member>(
-      await (
-        await this.membersDatabase.list()
-      ).map(async (record) => {
-        try {
-          const discordUser = await this.project.discordClient.getUser(
-            record.props.discordId.value
-          );
-          return {
-            name: record.props.name.value,
-            notionUser: record.props.user.value[0],
-            discordUser,
-          };
-        } catch (e) {}
-        return {
-          name: record.props.name.value,
-          notionUser: record.props.user.value[0],
-        };
-      })
-    );
+    this.members = (
+      await Promise.all<Member[] | []>(
+        await (
+          await this.membersDatabase.list()
+        ).map(async (record) => {
+          const name = record.props.name.value;
+          const notionUser = _.get(record.props.user.value, 0);
+
+          if (name && notionUser) {
+            const discordId = record.props.discordId.value;
+            if (discordId) {
+              try {
+                const discordUser = await this.project.discordClient.getUser(
+                  discordId
+                );
+                return [{ name, notionUser, discordUser }];
+              } catch (e) {}
+            }
+            return [{ name, notionUser }];
+          } else {
+            return [];
+          }
+        })
+      )
+    ).flatMap((v) => v);
   }
 }

@@ -7,6 +7,12 @@ import {
   AnyChannel,
   CommandInteraction,
   ButtonInteraction,
+  MessagePayload,
+  MessageOptions,
+  MessageReaction,
+  PartialMessageReaction,
+  User,
+  PartialUser,
 } from "discord.js";
 import _ from "lodash";
 
@@ -28,6 +34,7 @@ export default class DiscordClient {
       Intents.FLAGS.GUILDS,
       Intents.FLAGS.GUILD_MEMBERS,
       Intents.FLAGS.GUILD_MESSAGES,
+      Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
     ],
   });
 
@@ -104,6 +111,24 @@ export default class DiscordClient {
     );
   }
 
+  public onMessageReactionAdd(
+    func: (
+      reaction: MessageReaction | PartialMessageReaction,
+      user: User | PartialUser
+    ) => Awaitable<void>
+  ) {
+    this.client.on("messageReactionAdd", func);
+  }
+
+  public onMessageReactionRemove(
+    func: (
+      reaction: MessageReaction | PartialMessageReaction,
+      user: User | PartialUser
+    ) => Awaitable<void>
+  ) {
+    this.client.on("messageReactionRemove", func);
+  }
+
   public async getUser(userId: string) {
     return await this.client.users.fetch(userId);
   }
@@ -111,7 +136,7 @@ export default class DiscordClient {
   public async sendMessage(
     guildId: string,
     channelId: string,
-    message: string
+    message: string | MessagePayload | MessageOptions
   ) {
     if (!this.allowAllGuild && !_.includes(this.allowedGuildIds, guildId)) {
       throw new Error(`guildId is not allowed. guildId=${guildId}`);
@@ -127,7 +152,17 @@ export default class DiscordClient {
     if (!isTextChannel(channel)) {
       throw new Error(`channel is not TextChannel. channelId=${channelId}`);
     }
-    await channel.send(message);
+
+    return await channel.send(message);
+  }
+
+  async loadCannel(guildId: string, channelId: string) {
+    const guild = await this.client.guilds.fetch(guildId);
+    const channel = await guild.channels.fetch(channelId);
+    if (!isTextChannel(channel)) {
+      return;
+    }
+    await channel.messages.fetch({ limit: 100 });
   }
 
   public interaction() {}

@@ -27,6 +27,9 @@ class ProjectsDatabase extends NotionDatabase {
       "membersDatabaseLinks"
     ),
     discordGuildId: new NotionDatabasePropRichTextString("discordGuildId"),
+    FnName: new NotionDatabasePropRichTextString("FnName"),
+    FnUser: new NotionDatabasePropRichTextString("FnUser"),
+    FnDiscordId: new NotionDatabasePropRichTextString("FnDiscordId"),
   };
 }
 
@@ -55,22 +58,31 @@ async function main() {
   const clientMap = JSON.parse(CLIENT_MAP);
 
   const projects = projectConfigList
-    .map((table) => {
+    .map((record) => {
+      const projectName = record.props.projectName.value;
+
       const appConfigListDatabaseId = _.get(
-        table.props.appsDatabaseLinks.value,
+        record.props.appsDatabaseLinks.value,
         [0, "target"]
       );
       const { notionToken, discordToken } =
-        _.get(clientMap, table.props.clientCode.value) ?? {};
+        _.get(clientMap, record.props.clientCode.value ?? "") ?? {};
 
-      const discordGuildId = table.props.discordGuildId.value;
+      const discordGuildId = record.props.discordGuildId.value;
 
-      const membersDatabaseId = _.get(table.props.membersDatabaseLinks.value, [
+      const membersDatabaseId = _.get(record.props.membersDatabaseLinks.value, [
         0,
         "target",
       ]);
 
+      const membersDatabaseFieldNameMap = {
+        FnName: record.props.FnName.value ?? "name",
+        FnUser: record.props.FnUser.value ?? "user",
+        FnDiscordId: record.props.FnDiscordId.value ?? "discordId",
+      };
+
       if (
+        projectName &&
         notionToken &&
         discordToken &&
         appConfigListDatabaseId &&
@@ -78,7 +90,7 @@ async function main() {
         membersDatabaseId
       ) {
         return new Project({
-          name: table.props.projectName.value,
+          name: projectName,
           notionClient: new NotionClient({ token: notionToken }),
           discordClient: new DiscordClient({
             token: discordToken,
@@ -86,6 +98,7 @@ async function main() {
           }),
           appConfigListDatabaseId,
           membersDatabaseId,
+          membersDatabaseFieldNameMap,
           discordGuildId,
         });
       }

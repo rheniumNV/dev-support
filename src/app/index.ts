@@ -1,5 +1,11 @@
 import Project from "../project";
 import NotionDatabase from "../lib/notion/notionDatabase";
+import {
+  User,
+  PartialUser,
+  MessageReaction,
+  PartialMessageReaction,
+} from "discord.js";
 
 export default abstract class App<TConfigDatabase extends NotionDatabase> {
   project: Project;
@@ -28,4 +34,9 @@ export default abstract class App<TConfigDatabase extends NotionDatabase> {
   abstract setup(): Promise<void>;
 
   abstract update(): Promise<void>;
+
+  async onMessageReaction(
+    reaction: MessageReaction | PartialMessageReaction,
+    user: User | PartialUser
+  ): Promise<void> {}
 }

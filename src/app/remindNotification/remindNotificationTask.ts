@@ -8,6 +8,8 @@ import {
   NotionDatabasePropFormula,
   NotionDatabasePropNumber,
   NotionDatabasePropMultiSelect,
+  NotionDatabasePropUser,
+  TNotionUser,
 } from "../../lib/notion/notionDatabase/notionDatabaseProp";
 import moment from "moment";
 import _ from "lodash";
@@ -35,13 +37,20 @@ export class NotificationTargetDatabase extends NotionDatabase {
       mentionUsers?: string;
       metaData?: string;
       date?: string;
-    }
+    },
+    userFields: Array<{ name: string }>
   ) {
     super({ notionClientOwner: init.notionClientOwner, rawId: init.rawId });
     this.props.message.rawName = rawNames.message ?? "message";
     this.props.mentionUsers.rawName = rawNames.mentionUsers ?? "mentionUsers";
     this.props.metaData.rawName = rawNames.metaData ?? "metaData";
     this.props.date.rawName = rawNames.date ?? "date";
+    userFields.forEach(({ name }) => {
+      this.props = {
+        ...this.props,
+        ...{ [name]: new NotionDatabasePropUser(name) },
+      };
+    });
   }
 
   async updateMetaDate(target: this["props"]["metaData"], value: string) {
@@ -53,6 +62,14 @@ export class NotificationTargetDatabase extends NotionDatabase {
         },
       },
     ]);
+  }
+
+  async updateUserField(
+    target: NotionDatabasePropUser,
+    value: Array<TNotionUser>
+  ) {
+    const prop = value.map((user) => ({ object: "user", id: user.id }));
+    await this.directUpdate<NotionDatabasePropUser>(target, prop);
   }
 }
 
@@ -69,21 +86,32 @@ type TNotifyFunctionInput = {
   message: string;
   mentionTargets: string;
   activeTimings: Array<RemindNotificationTimingsDatabase["props"]>;
+  scheduleDate: Date;
+  scheduleId: string;
 };
 export default class RemindNotificationTask {
+  id: string;
   notificationTargetDatabase: NotificationTargetDatabase;
   remindNotificationTimingsDatabase: RemindNotificationTimingsDatabase;
+  discordChannelId: string;
+  reactionFunctions: { [key: string]: string };
 
   notifyFunction: (data: TNotifyFunctionInput) => void = () => {};
 
   constructor(init: {
+    id: string;
     notificationTargetDatabase: NotificationTargetDatabase;
     remindNotificationTimingsDatabase: RemindNotificationTimingsDatabase;
+    discordChannelId: string;
+    reactionFunctions: { [key: string]: string };
     notifyFunction: (data: TNotifyFunctionInput) => void;
   }) {
+    this.id = init.id;
     this.notificationTargetDatabase = init.notificationTargetDatabase;
     this.remindNotificationTimingsDatabase =
       init.remindNotificationTimingsDatabase;
+    this.discordChannelId = init.discordChannelId;
+    this.reactionFunctions = init.reactionFunctions;
     this.notifyFunction = init.notifyFunction;
   }
 
@@ -99,22 +127,21 @@ export default class RemindNotificationTask {
     this.notificationTargetDatabase.cache.forEach((record) => {
       const metaData =
         parseJsonSafe<{ [key: string]: boolean }>(
-          record.props.metaData.value
+          record.props.metaData.value ?? "{}"
         ) ?? {};
 
-      const startDate = moment(record.props.date.value.start);
+      const startDate = moment(record.props.date.value?.start);
       const diffMin = startDate.diff(nowDate, "minutes");
 
       if (diffMin <= 0) {
         return;
       }
-      console.log("METADATA", metaData);
       const activeTimings = _.filter(
         this.remindNotificationTimingsDatabase?.cache,
         (timing) => {
           return (
             Number(timing.props.minutes.value) > diffMin &&
-            !_.get(metaData, timing.props.code.value, false)
+            !_.get(metaData, timing.props.code.value ?? "", false)
           );
         }
       );
@@ -123,7 +150,10 @@ export default class RemindNotificationTask {
         ...metaData,
         ..._.reduce(
           activeTimings,
-          (prev, curr) => ({ ...prev, [curr.props.code.value]: true }),
+          (prev, curr) => ({
+            ...prev,
+            [curr.props.code.value ?? "-"]: true,
+          }),
           {}
         ),
       };
@@ -138,6 +168,8 @@ export default class RemindNotificationTask {
           message: record.props.message.value ?? "",
           mentionTargets: record.props.mentionUsers.value ?? "",
           activeTimings: activeTimings.map((record) => record.props),
+          scheduleDate: startDate.toDate(),
+          scheduleId: record.id,
         });
       }
     });
